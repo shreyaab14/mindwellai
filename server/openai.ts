@@ -13,7 +13,8 @@ export async function generateTherapyResponse(
   userMessage: string,
   context: TherapyContext
 ): Promise<string> {
-  const systemPrompt = buildSystemPrompt(context.emotion, context.emotionConfidence);
+  const confidenceNum = context.emotionConfidence ? parseFloat(context.emotionConfidence) : undefined;
+  const systemPrompt = buildSystemPrompt(context.emotion, confidenceNum);
   
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
@@ -56,8 +57,8 @@ Guidelines:
 - Validate emotions before offering suggestions
 - End with open-ended questions when appropriate to encourage dialogue`;
 
-  if (emotion && confidence) {
-    const confidencePercent = Math.round(parseFloat(confidence) * 100);
+  if (emotion && confidence !== undefined) {
+    const confidencePercent = Math.round(confidence * 100);
     basePrompt += `\n\nCurrent emotional context: The user appears to be feeling ${emotion} (${confidencePercent}% confidence). Adapt your response to acknowledge and support this emotional state appropriately.`;
     
     const emotionGuidance: Record<string, string> = {
