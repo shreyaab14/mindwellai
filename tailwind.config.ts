@@ -81,11 +81,21 @@ export default {
           busy: "rgb(239 68 68)",
           offline: "rgb(156 163 175)",
         },
+        emotion: {
+          happy: "hsl(50 75% 60%)",
+          sad: "hsl(220 30% 50%)",
+          angry: "hsl(15 50% 55%)",
+          fearful: "hsl(280 35% 55%)",
+          disgusted: "hsl(140 20% 45%)",
+          surprised: "hsl(190 45% 55%)",
+          neutral: "hsl(220 10% 50%)",
+        },
       },
       fontFamily: {
-        sans: ["var(--font-sans)"],
+        sans: ["Inter", "var(--font-sans)"],
         serif: ["var(--font-serif)"],
         mono: ["var(--font-mono)"],
+        heading: ["Poppins", "sans-serif"],
       },
       keyframes: {
         "accordion-down": {
