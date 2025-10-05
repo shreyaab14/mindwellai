@@ -16,7 +16,7 @@ export const messages = pgTable("messages", {
   role: text("role").notNull(),
   content: text("content").notNull(),
   emotion: text("emotion"),
-  emotionConfidence: integer("emotion_confidence"),
+  emotionConfidence: text("emotion_confidence"),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
 });
 
@@ -24,7 +24,7 @@ export const emotionRecords = pgTable("emotion_records", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   sessionId: varchar("session_id").notNull(),
   emotion: text("emotion").notNull(),
-  confidence: integer("confidence").notNull(),
+  confidence: text("confidence").notNull(),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
 });
 
@@ -67,4 +67,10 @@ export interface ChatMessage {
   emotion?: EmotionType;
   emotionConfidence?: number;
   timestamp: Date;
+}
+
+export function parseEmotionConfidence(value: string | null | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? undefined : parsed;
 }

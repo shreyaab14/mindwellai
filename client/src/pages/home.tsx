@@ -12,6 +12,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Play, Square, Loader2 } from "lucide-react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { loadModels, detectEmotion } from "@/lib/emotionDetection";
 
 export default function Home() {
   const [isSessionActive, setIsSessionActive] = useState(false);
@@ -90,7 +91,7 @@ export default function Home() {
         sessionId,
         content,
         emotion: emotion || null,
-        emotionConfidence: emotionConfidence ? Math.round(emotionConfidence * 100) : null,
+        emotionConfidence: emotionConfidence ? emotionConfidence.toString() : null,
       });
       
       return response;
@@ -152,29 +153,50 @@ export default function Home() {
   };
 
   const loadFaceDetectionModels = async () => {
-    setIsModelLoading(false);
-    startEmotionDetection();
+    try {
+      await loadModels();
+      setIsModelLoading(false);
+      startEmotionDetection();
+      toast({
+        title: "Emotion detection ready",
+        description: "Face recognition models loaded successfully.",
+      });
+    } catch (error) {
+      setIsModelLoading(false);
+      setWebcamError("Failed to load emotion detection models.");
+      toast({
+        title: "Model Error",
+        description: "Failed to load emotion detection. Please refresh the page.",
+        variant: "destructive",
+      });
+    }
   };
 
   const startEmotionDetection = () => {
     detectionIntervalRef.current = window.setInterval(() => {
-      detectEmotion();
+      performEmotionDetection();
     }, 2000);
   };
 
-  const detectEmotion = () => {
-    const emotions: EmotionType[] = ['happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised', 'neutral'];
-    const randomEmotion = emotions[Math.floor(Math.random() * emotions.length)];
-    const confidence = 0.6 + Math.random() * 0.3;
+  const performEmotionDetection = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
     
-    const detection: EmotionDetection = {
-      emotion: randomEmotion,
-      confidence,
-      timestamp: Date.now(),
-    };
-    
-    setCurrentEmotion(detection);
-    setEmotionHistory(prev => [...prev, detection].slice(-30));
+    try {
+      const result = await detectEmotion(videoRef.current, canvasRef.current);
+      
+      if (result) {
+        const detection: EmotionDetection = {
+          emotion: result.emotion,
+          confidence: result.confidence,
+          timestamp: Date.now(),
+        };
+        
+        setCurrentEmotion(detection);
+        setEmotionHistory(prev => [...prev, detection].slice(-30));
+      }
+    } catch (error) {
+      console.error("Emotion detection error:", error);
+    }
   };
 
   useEffect(() => {

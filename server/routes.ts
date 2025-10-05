@@ -58,7 +58,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const conversationHistory = await storage.getSessionMessages(validatedData.sessionId);
       const context: TherapyContext = {
         emotion: validatedData.emotion || undefined,
-        emotionConfidence: validatedData.emotionConfidence ? validatedData.emotionConfidence / 100 : undefined,
+        emotionConfidence: validatedData.emotionConfidence || undefined,
         conversationHistory: conversationHistory
           .filter(msg => msg.id !== userMessage.id)
           .map(msg => ({
@@ -104,7 +104,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const record = await storage.createEmotionRecord({
         sessionId,
         emotion,
-        confidence: Math.round(confidence * 100),
+        confidence: confidence.toString(),
       });
 
       res.json({ success: true, record });

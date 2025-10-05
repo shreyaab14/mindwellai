@@ -5,7 +5,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export interface TherapyContext {
   emotion?: string;
-  emotionConfidence?: number;
+  emotionConfidence?: string;
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
 
@@ -57,7 +57,7 @@ Guidelines:
 - End with open-ended questions when appropriate to encourage dialogue`;
 
   if (emotion && confidence) {
-    const confidencePercent = Math.round(confidence * 100);
+    const confidencePercent = Math.round(parseFloat(confidence) * 100);
     basePrompt += `\n\nCurrent emotional context: The user appears to be feeling ${emotion} (${confidencePercent}% confidence). Adapt your response to acknowledge and support this emotional state appropriately.`;
     
     const emotionGuidance: Record<string, string> = {
