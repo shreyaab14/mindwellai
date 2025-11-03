@@ -9,10 +9,12 @@ import { MessageInput } from "@/components/MessageInput";
 import { EmotionTimeline } from "@/components/EmotionTimeline";
 import { PrivacyBadge } from "@/components/PrivacyBadge";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Play, Square, Loader2 } from "lucide-react";
+import { CrisisAlert } from "@/components/CrisisAlert";
+import { Play, Square, Loader2, History, TrendingUp, Heart } from "lucide-react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { loadModels, detectEmotion } from "@/lib/emotionDetection";
+import { Link } from "wouter";
 
 export default function Home() {
   const [isSessionActive, setIsSessionActive] = useState(false);
@@ -22,6 +24,7 @@ export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [webcamError, setWebcamError] = useState<string>("");
   const [isModelLoading, setIsModelLoading] = useState(false);
+  const [showCrisisAlert, setShowCrisisAlert] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -29,6 +32,17 @@ export default function Home() {
   const detectionIntervalRef = useRef<number | null>(null);
   
   const { toast } = useToast();
+
+  const detectCrisis = (messageText: string): boolean => {
+    const crisisKeywords = [
+      'suicide', 'kill myself', 'end my life', 'want to die', 'better off dead',
+      'self harm', 'hurt myself', 'cutting', 'overdose', 'no reason to live',
+      'can\'t go on', 'unbearable pain', 'hopeless', 'worthless'
+    ];
+    
+    const lowerText = messageText.toLowerCase();
+    return crisisKeywords.some(keyword => lowerText.includes(keyword));
+  };
 
   const startSessionMutation = useMutation({
     mutationFn: async () => {
@@ -217,6 +231,10 @@ export default function Home() {
   }, []);
 
   const handleSendMessage = (content: string) => {
+    if (detectCrisis(content)) {
+      setShowCrisisAlert(true);
+    }
+    
     sendMessageMutation.mutate({
       content,
       emotion: currentEmotion?.emotion,
@@ -258,25 +276,51 @@ export default function Home() {
               </div>
 
               <div className="flex flex-col items-center gap-4 py-8">
-                <Button
-                  size="lg"
-                  onClick={() => startSessionMutation.mutate()}
-                  disabled={startSessionMutation.isPending}
-                  className="rounded-2xl px-8 py-6 text-lg h-auto"
-                  data-testid="button-start-session"
-                >
-                  {startSessionMutation.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      Starting Session...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="mr-2 h-5 w-5" />
-                      Start Therapy Session
-                    </>
-                  )}
-                </Button>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <Button
+                    size="lg"
+                    onClick={() => startSessionMutation.mutate()}
+                    disabled={startSessionMutation.isPending}
+                    className="rounded-2xl px-8 py-6 text-lg h-auto"
+                    data-testid="button-start-session"
+                  >
+                    {startSessionMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        Starting Session...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="mr-2 h-5 w-5" />
+                        Start Therapy Session
+                      </>
+                    )}
+                  </Button>
+                  
+                  <div className="flex gap-3">
+                    <Link href="/history" data-testid="link-history">
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        className="rounded-2xl px-6 py-6 text-base h-auto"
+                      >
+                        <History className="mr-2 h-5 w-5" />
+                        History
+                      </Button>
+                    </Link>
+                    
+                    <Link href="/analytics" data-testid="link-analytics">
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        className="rounded-2xl px-6 py-6 text-base h-auto"
+                      >
+                        <TrendingUp className="mr-2 h-5 w-5" />
+                        Analytics
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
                 
                 <PrivacyBadge />
               </div>
@@ -301,11 +345,29 @@ export default function Home() {
                   </p>
                 </div>
               </div>
+
+              <div className="mt-8 pt-8 border-t">
+                <p className="text-center text-muted-foreground mb-4">
+                  Explore additional resources
+                </p>
+                <div className="flex flex-wrap justify-center gap-3">
+                  <Link href="/coping-strategies" data-testid="link-coping">
+                    <Button variant="outline" size="sm">
+                      <Heart className="w-4 h-4 mr-2" />
+                      Coping Strategies
+                    </Button>
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
         ) : (
           <div className="grid lg:grid-cols-5 gap-6 h-[calc(100vh-12rem)]">
             <div className="lg:col-span-2 space-y-4">
+              {showCrisisAlert && (
+                <CrisisAlert onDismiss={() => setShowCrisisAlert(false)} />
+              )}
+              
               <div className="space-y-4">
                 <WebcamView
                   videoRef={videoRef}

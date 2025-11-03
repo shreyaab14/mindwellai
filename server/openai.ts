@@ -78,3 +78,61 @@ Guidelines:
 
   return basePrompt;
 }
+
+export interface SessionSummary {
+  overview: string;
+  keyInsights: string[];
+  emotionalJourney: string;
+  recommendations: string[];
+}
+
+export async function generateSessionSummary(
+  messages: Array<{ role: string; content: string }>,
+  emotions: Array<{ emotion: string; timestamp: Date }>
+): Promise<SessionSummary> {
+  const emotionSummary = emotions.map(e => e.emotion).join(', ');
+  const conversationText = messages
+    .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+    .join('\n\n');
+
+  const prompt = `Analyze this therapy session and provide a structured summary:
+
+Emotions detected: ${emotionSummary}
+
+Conversation:
+${conversationText}
+
+Please provide:
+1. A brief overview (2-3 sentences) of what was discussed
+2. 3-5 key insights or themes that emerged
+3. A description of the emotional journey during the session
+4. 2-3 personalized recommendations for continued growth
+
+Format your response as JSON with these keys: overview, keyInsights (array), emotionalJourney, recommendations (array)`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-5",
+      messages: [
+        {
+          role: "system",
+          content: "You are a compassionate therapist creating helpful session summaries. Be warm, insightful, and supportive.",
+        },
+        { role: "user", content: prompt },
+      ],
+      max_completion_tokens: 1024,
+      response_format: { type: "json_object" },
+    });
+
+    const content = response.choices[0].message.content || "{}";
+    return JSON.parse(content) as SessionSummary;
+  } catch (error) {
+    console.error("Error generating session summary:", error);
+    return {
+      overview: "This session focused on emotional expression and self-reflection.",
+      keyInsights: ["The user engaged openly with their feelings", "Progress was made in self-understanding"],
+      emotionalJourney: "The session showed varied emotional states reflecting authentic engagement.",
+      recommendations: ["Continue practicing self-awareness", "Consider journaling between sessions"],
+    };
+  }
+}

@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { generateTherapyResponse, type TherapyContext } from "./openai";
+import { generateTherapyResponse, generateSessionSummary, type TherapyContext } from "./openai";
 import { insertMessageSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -128,6 +128,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching emotions:", error);
       res.status(500).json({ error: "Failed to fetch emotions" });
+    }
+  });
+
+  app.get("/api/sessions", async (req, res) => {
+    try {
+      const sessions = await storage.getAllSessions();
+      res.json({ sessions });
+    } catch (error) {
+      console.error("Error fetching sessions:", error);
+      res.status(500).json({ error: "Failed to fetch sessions" });
+    }
+  });
+
+  app.get("/api/sessions/:sessionId", async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      
+      const session = await storage.getSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      const messages = await storage.getSessionMessages(sessionId);
+      const emotions = await storage.getSessionEmotions(sessionId);
+
+      res.json({ session, messages, emotions });
+    } catch (error) {
+      console.error("Error fetching session:", error);
+      res.status(500).json({ error: "Failed to fetch session" });
+    }
+  });
+
+  app.get("/api/emotions/all", async (req, res) => {
+    try {
+      const emotions = await storage.getAllEmotionRecords();
+      res.json({ emotions });
+    } catch (error) {
+      console.error("Error fetching all emotions:", error);
+      res.status(500).json({ error: "Failed to fetch emotions" });
+    }
+  });
+
+  app.get("/api/sessions/:sessionId/summary", async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      
+      const session = await storage.getSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      const messages = await storage.getSessionMessages(sessionId);
+      const emotions = await storage.getSessionEmotions(sessionId);
+
+      if (messages.length < 2) {
+        return res.status(400).json({ error: "Session has insufficient data for summary" });
+      }
+
+      const summary = await generateSessionSummary(
+        messages.map(m => ({ role: m.role, content: m.content })),
+        emotions.map(e => ({ emotion: e.emotion, timestamp: e.timestamp }))
+      );
+
+      res.json({ summary });
+    } catch (error) {
+      console.error("Error generating session summary:", error);
+      res.status(500).json({ error: "Failed to generate summary" });
     }
   });
 
