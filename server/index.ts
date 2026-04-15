@@ -44,7 +44,7 @@ app.use((req, res, next) => {
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
+    // throw err; // Remove throw to prevent crash
   });
 
   // importantly only setup vite in development and after
@@ -70,7 +70,12 @@ app.use((req, res, next) => {
     listenOptions.reusePort = true;
   }
 
-  server.listen(listenOptions, () => {
-    log(`serving on port ${port}`);
-  });
+  // For Vercel serverless, export the app instead of listening
+  if (process.env.VERCEL) {
+    module.exports = app;
+  } else {
+    server.listen(listenOptions, () => {
+      log(`serving on port ${port}`);
+    });
+  }
 })();
