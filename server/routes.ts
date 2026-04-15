@@ -2,6 +2,13 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateTherapyResponse, generateSessionSummary, type TherapyContext } from "./openai";
+import { 
+  detectRisk, 
+  generateAnalyticsData, 
+  generateSessionSummary as generateAISummary,
+  type AnalyticsData 
+} from "./analytics";
+import { generateMoodReportPDF } from "./pdf-generator";
 import { insertMessageSchema } from "@shared/schema";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -570,6 +577,88 @@ export function registerRoutes(app: Express): Server {
       res.json({ summary });
     } catch (error) {
       console.error("Error generating session summary:", error);
+      res.status(500).json({ error: "Failed to generate summary" });
+    }
+  });
+
+  // NEW ENDPOINTS FOR ANALYTICS & AI
+
+  // Risk Detection Endpoint
+  app.post("/api/check-risk", requireAuth, async (req: any, res) => {
+    try {
+      const { text } = req.body;
+      if (!text) {
+        return res.status(400).json({ error: "Text is required" });
+      }
+
+      const riskAnalysis = detectRisk(text);
+      res.json(riskAnalysis);
+    } catch (error) {
+      console.error("Error analyzing risk:", error);
+      res.status(500).json({ error: "Failed to analyze risk" });
+    }
+  });
+
+  // Analytics Endpoint
+  app.get("/api/analytics/:sessionId", requireAuth, async (req: any, res) => {
+    try {
+      const { sessionId } = req.params;
+
+      const messages = await storage.getSessionMessages(sessionId);
+      const emotions = await storage.getSessionEmotions(sessionId);
+
+      if (messages.length === 0 && emotions.length === 0) {
+        return res.status(400).json({ error: "No data in session" });
+      }
+
+      const analyticsData = generateAnalyticsData(emotions, messages);
+      res.json(analyticsData);
+    } catch (error) {
+      console.error("Error generating analytics:", error);
+      res.status(500).json({ error: "Failed to generate analytics" });
+    }
+  });
+
+  // PDF Report Endpoint
+  app.get("/api/report/pdf/:sessionId", requireAuth, async (req: any, res) => {
+    try {
+      const { sessionId } = req.params;
+
+      const messages = await storage.getSessionMessages(sessionId);
+      const emotions = await storage.getSessionEmotions(sessionId);
+
+      if (messages.length === 0 && emotions.length === 0) {
+        return res.status(400).json({ error: "No data in session" });
+      }
+
+      const analyticsData = generateAnalyticsData(emotions, messages);
+      const pdfBuffer = generateMoodReportPDF(analyticsData);
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="mood-report-${sessionId}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      res.status(500).json({ error: "Failed to generate report" });
+    }
+  });
+
+  // Enhanced Session Summary (AI-powered)
+  app.get("/api/session-summary/:sessionId", requireAuth, async (req: any, res) => {
+    try {
+      const { sessionId } = req.params;
+
+      const messages = await storage.getSessionMessages(sessionId);
+      const emotions = await storage.getSessionEmotions(sessionId);
+
+      if (messages.length === 0) {
+        return res.status(400).json({ error: "No messages in session" });
+      }
+
+      const summary = generateAISummary(messages, emotions);
+      res.json({ summary });
+    } catch (error) {
+      console.error("Error generating AI summary:", error);
       res.status(500).json({ error: "Failed to generate summary" });
     }
   });
