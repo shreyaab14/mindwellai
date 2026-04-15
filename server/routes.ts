@@ -10,7 +10,7 @@ import { Strategy as LocalStrategy } from "passport-local";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export function registerRoutes(app: Express): Server {
   // Passport configuration
   passport.use(new LocalStrategy({
     usernameField: 'username',
