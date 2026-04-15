@@ -6,6 +6,8 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+export default app;
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -70,12 +72,9 @@ app.use((req, res, next) => {
     listenOptions.reusePort = true;
   }
 
-  // For Vercel serverless, export the app instead of listening
-  if (process.env.VERCEL) {
-    export default app;
-  } else {
-    server.listen(listenOptions, () => {
-      log(`serving on port ${port}`);
-    });
-  }
+  // For Vercel serverless, the app is exported at the top
+  // For local development, listen on the port
+  server.listen(listenOptions, () => {
+    log(`serving on port ${port}`);
+  });
 })();
