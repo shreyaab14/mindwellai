@@ -72,7 +72,7 @@ app.use((req, res, next) => {
 
   // For Vercel serverless, export the app instead of listening
   if (process.env.VERCEL) {
-    module.exports = app;
+    export default app;
   } else {
     server.listen(listenOptions, () => {
       log(`serving on port ${port}`);
