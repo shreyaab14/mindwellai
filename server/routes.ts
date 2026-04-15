@@ -3,18 +3,277 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateTherapyResponse, generateSessionSummary, type TherapyContext } from "./openai";
 import { insertMessageSchema } from "@shared/schema";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import passport from "passport";
+import { Strategy as LocalStrategy } from "passport-local";
+
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  app.post("/api/sessions/start", async (req, res) => {
+  // Passport configuration
+  passport.use(new LocalStrategy({
+    usernameField: 'username',
+    passwordField: 'password'
+  }, async (username, password, done) => {
     try {
-      const session = await storage.createSession();
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return done(null, false, { message: 'Incorrect username.' });
+      }
+      
+      const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+      if (!isValidPassword) {
+        return done(null, false, { message: 'Incorrect password.' });
+      }
+      
+      return done(null, user);
+    } catch (error) {
+      return done(error);
+    }
+  }));
+
+  passport.serializeUser((user: any, done) => {
+    done(null, user.id);
+  });
+
+  passport.deserializeUser(async (id: string, done) => {
+    try {
+      const user = await storage.getUserById(id);
+      done(null, user);
+    } catch (error) {
+      done(error);
+    }
+  });
+
+  // Auth middleware
+  const requireAuth = (req: any, res: any, next: any) => {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      req.user = decoded;
+      next();
+    } catch (error) {
+      res.status(401).json({ error: 'Invalid token' });
+    }
+  };
+
+  // Auth routes
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const { username, email, password, fullName } = req.body;
+      
+      // Check if user already exists
+      const existingUser = await storage.getUserByUsername(username) || await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ error: "User already exists" });
+      }
+      
+      // Hash password
+      const passwordHash = await bcrypt.hash(password, 10);
+      
+      // Create user
+      const user = await storage.createUser({
+        username,
+        email,
+        passwordHash,
+        fullName,
+      });
+      
+      // Create default preferences
+      await storage.createUserPreferences({ userId: user.id });
+      
+      // Generate JWT
+      const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
+      
+      res.json({ user: { id: user.id, username: user.username, email: user.email, fullName: user.fullName }, token });
+    } catch (error) {
+      console.error("Registration error:", error);
+      res.status(500).json({ error: "Registration failed" });
+    }
+  });
+
+  app.post("/api/auth/login", (req, res, next) => {
+    passport.authenticate('local', async (err: any, user: any, info: any) => {
+      if (err) {
+        return res.status(500).json({ error: 'Authentication error' });
+      }
+      if (!user) {
+        return res.status(401).json({ error: info.message });
+      }
+      
+      // Update last login
+      await storage.updateUserLastLogin(user.id);
+      
+      // Generate JWT
+      const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
+      
+      res.json({ user: { id: user.id, username: user.username, email: user.email, fullName: user.fullName }, token });
+    })(req, res, next);
+  });
+
+  app.get("/api/auth/me", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById((req as any).user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      res.json({ 
+        id: user.id, 
+        username: user.username, 
+        email: user.email, 
+        fullName: user.fullName,
+        createdAt: user.createdAt,
+        lastLoginAt: user.lastLoginAt
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get user" });
+    }
+  });
+  app.post("/api/sessions/start", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.id;
+      const { title } = req.body;
+      const session = await storage.createSession(userId, title);
       res.json({ sessionId: session.id });
     } catch (error) {
       console.error("Error starting session:", error);
       res.status(500).json({ error: "Failed to start session" });
     }
   });
+  // Journal routes
+  app.get("/api/journal", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.id;
+      const entries = await storage.getUserJournalEntries(userId);
+      res.json(entries);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get journal entries" });
+    }
+  });
 
+  app.post("/api/journal", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.id;
+      const { title, content, mood, tags } = req.body;
+      
+      const entry = await storage.createJournalEntry({
+        userId,
+        title,
+        content,
+        mood,
+        tags: JSON.stringify(tags || []),
+      });
+      
+      res.json(entry);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create journal entry" });
+    }
+  });
+
+  app.put("/api/journal/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { title, content, mood, tags } = req.body;
+      
+      const entry = await storage.updateJournalEntry(id, {
+        title,
+        content,
+        mood,
+        tags: JSON.stringify(tags || []),
+      });
+      
+      if (!entry) {
+        return res.status(404).json({ error: "Journal entry not found" });
+      }
+      
+      res.json(entry);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update journal entry" });
+    }
+  });
+
+  app.delete("/api/journal/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await storage.deleteJournalEntry(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ error: "Journal entry not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete journal entry" });
+    }
+  });
+
+  // Coping strategies routes
+  app.get("/api/coping-strategies", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.id;
+      const strategies = await storage.getUserCopingStrategies(userId);
+      res.json(strategies);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get coping strategies" });
+    }
+  });
+
+  app.get("/api/coping-strategies/public", async (req, res) => {
+    try {
+      const strategies = await storage.getPublicCopingStrategies();
+      res.json(strategies);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get public coping strategies" });
+    }
+  });
+
+  app.post("/api/coping-strategies", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.id;
+      const { title, description, category, isPublic } = req.body;
+      
+      const strategy = await storage.createCopingStrategy({
+        userId,
+        title,
+        description,
+        category,
+        isPublic,
+      });
+      
+      res.json(strategy);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create coping strategy" });
+    }
+  });
+
+  // User preferences routes
+  app.get("/api/preferences", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.id;
+      const preferences = await storage.getUserPreferences(userId);
+      res.json(preferences);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get user preferences" });
+    }
+  });
+
+  app.put("/api/preferences", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.id;
+      const updates = req.body;
+      
+      const preferences = await storage.updateUserPreferences(userId, updates);
+      res.json(preferences);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update user preferences" });
+    }
+  });
   app.post("/api/sessions/end", async (req, res) => {
     try {
       const { sessionId } = req.body;
@@ -38,27 +297,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/messages", async (req, res) => {
+  app.post("/api/messages", requireAuth, async (req, res) => {
     try {
-      const validatedData = insertMessageSchema.parse(req.body);
+      const userId = (req as any).user.id;
+      const { sessionId, content, emotion, emotionConfidence } = req.body;
       
-      const session = await storage.getSession(validatedData.sessionId);
+      // Validate required fields
+      if (!sessionId || !content) {
+        return res.status(400).json({ error: "Missing required fields: sessionId and content" });
+      }
+      
+      const session = await storage.getSession(sessionId);
       if (!session) {
         return res.status(404).json({ error: "Session not found" });
       }
 
+      // Verify session belongs to the authenticated user
+      if (session.userId && session.userId !== userId) {
+        return res.status(403).json({ error: "Unauthorized: Session does not belong to you" });
+      }
+
       const userMessage = await storage.createMessage({
-        sessionId: validatedData.sessionId,
+        sessionId,
         role: "user",
-        content: validatedData.content,
-        emotion: validatedData.emotion,
-        emotionConfidence: validatedData.emotionConfidence,
+        content,
+        emotion: emotion || null,
+        emotionConfidence: emotionConfidence || null,
       });
 
-      const conversationHistory = await storage.getSessionMessages(validatedData.sessionId);
+      const conversationHistory = await storage.getSessionMessages(sessionId);
       const context: TherapyContext = {
-        emotion: validatedData.emotion || undefined,
-        emotionConfidence: validatedData.emotionConfidence || undefined,
+        emotion: emotion || undefined,
+        emotionConfidence: emotionConfidence || undefined,
         conversationHistory: conversationHistory
           .filter(msg => msg.id !== userMessage.id)
           .map(msg => ({
@@ -68,10 +338,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .slice(-10),
       };
 
-      const therapyResponse = await generateTherapyResponse(validatedData.content, context);
+      const therapyResponse = await generateTherapyResponse(content, context);
 
       const assistantMessage = await storage.createMessage({
-        sessionId: validatedData.sessionId,
+        sessionId,
         role: "assistant",
         content: therapyResponse,
         emotion: null,
@@ -85,6 +355,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error processing message:", error);
       res.status(500).json({ error: "Failed to process message" });
+    }
+  });
+
+  // Streaming endpoint for real-time chat responses (ChatGPT-like)
+  app.post("/api/messages/stream", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.id;
+      const { sessionId, content, emotion, emotionConfidence } = req.body;
+      
+      // Validate required fields
+      if (!sessionId || !content) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.write('data: {"type":"error","error":"Missing required fields: sessionId and content"}\n\n');
+        res.end();
+        return;
+      }
+      
+      const session = await storage.getSession(sessionId);
+      if (!session) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.write('data: {"type":"error","error":"Session not found"}\n\n');
+        res.end();
+        return;
+      }
+
+      // Verify session belongs to the authenticated user
+      if (session.userId && session.userId !== userId) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.write('data: {"type":"error","error":"Unauthorized"}\n\n');
+        res.end();
+        return;
+      }
+
+      const userMessage = await storage.createMessage({
+        sessionId,
+        role: "user",
+        content,
+        emotion: emotion || null,
+        emotionConfidence: emotionConfidence || null,
+      });
+
+      const conversationHistory = await storage.getSessionMessages(sessionId);
+      const context: TherapyContext = {
+        emotion: emotion || undefined,
+        emotionConfidence: emotionConfidence || undefined,
+        conversationHistory: conversationHistory
+          .filter(msg => msg.id !== userMessage.id)
+          .map(msg => ({
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content,
+          }))
+          .slice(-10),
+      };
+
+      // Set up SSE response
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      // Send a stream data event (for browser compatibility)
+      res.write('data: {"type":"start"}\n\n');
+
+      try {
+        const therapyResponse = await generateTherapyResponse(content, context);
+        
+        // Split response into chunks and stream them
+        const chunkSize = 10;
+        for (let i = 0; i < therapyResponse.length; i += chunkSize) {
+          const chunk = therapyResponse.slice(i, i + chunkSize);
+          const data = JSON.stringify({ type: 'chunk', content: chunk });
+          res.write(`data: ${data}\n\n`);
+          
+          // Small delay to simulate streaming
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+
+        // Save the complete message
+        const assistantMessage = await storage.createMessage({
+          sessionId,
+          role: "assistant",
+          content: therapyResponse,
+          emotion: null,
+          emotionConfidence: null,
+        });
+
+        // Send completion event
+        const completeData = JSON.stringify({ 
+          type: 'complete', 
+          messageId: assistantMessage.id,
+          content: therapyResponse 
+        });
+        res.write(`data: ${completeData}\n\n`);
+      } catch (error) {
+        console.error("Error generating therapy response:", error);
+        const errorData = JSON.stringify({ 
+          type: 'error', 
+          error: 'Failed to generate response' 
+        });
+        res.write(`data: ${errorData}\n\n`);
+      }
+
+      res.end();
+    } catch (error) {
+      console.error("Error setting up message stream:", error);
+      res.status(500).json({ error: "Failed to stream message" });
     }
   });
 

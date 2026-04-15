@@ -5,25 +5,283 @@ import {
   type InsertMessage,
   type EmotionRecord,
   type InsertEmotionRecord,
+  type User,
+  type InsertUser,
+  type JournalEntry,
+  type InsertJournalEntry,
+  type CopingStrategy,
+  type InsertCopingStrategy,
+  type UserPreferences,
+  type InsertUserPreferences,
+  users,
   therapySessions,
   messages,
-  emotionRecords
+  emotionRecords,
+  journalEntries,
+  copingStrategies,
+  userPreferences
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
-  createSession(): Promise<TherapySession>;
+  // User methods
+  createUser(user: InsertUser): Promise<User>;
+  getUserById(id: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  updateUserLastLogin(id: string): Promise<void>;
+  
+  // Session methods
+  createSession(userId?: string, title?: string): Promise<TherapySession>;
   getSession(id: string): Promise<TherapySession | undefined>;
   endSession(id: string, duration: number): Promise<TherapySession | undefined>;
-  getAllSessions(): Promise<TherapySession[]>;
+  getAllSessions(userId?: string): Promise<TherapySession[]>;
   
+  // Message methods
   createMessage(message: InsertMessage): Promise<Message>;
   getSessionMessages(sessionId: string): Promise<Message[]>;
   
+  // Emotion methods
   createEmotionRecord(record: InsertEmotionRecord): Promise<EmotionRecord>;
   getSessionEmotions(sessionId: string): Promise<EmotionRecord[]>;
-  getAllEmotionRecords(): Promise<EmotionRecord[]>;
+  getAllEmotionRecords(userId?: string): Promise<EmotionRecord[]>;
+  
+  // Journal methods
+  createJournalEntry(entry: InsertJournalEntry): Promise<JournalEntry>;
+  getUserJournalEntries(userId: string): Promise<JournalEntry[]>;
+  updateJournalEntry(id: string, updates: Partial<InsertJournalEntry>): Promise<JournalEntry | undefined>;
+  deleteJournalEntry(id: string): Promise<boolean>;
+  
+  // Coping strategies
+  createCopingStrategy(strategy: InsertCopingStrategy): Promise<CopingStrategy>;
+  getUserCopingStrategies(userId: string): Promise<CopingStrategy[]>;
+  getPublicCopingStrategies(): Promise<CopingStrategy[]>;
+  
+  // User preferences
+  createUserPreferences(prefs: InsertUserPreferences): Promise<UserPreferences>;
+  getUserPreferences(userId: string): Promise<UserPreferences | undefined>;
+  updateUserPreferences(userId: string, updates: Partial<InsertUserPreferences>): Promise<UserPreferences | undefined>;
+}
+
+// In-memory storage for testing without database setup
+class InMemoryStorage implements IStorage {
+  private users: User[] = [];
+  private sessions: TherapySession[] = [];
+  private messages: Message[] = [];
+  private emotions: EmotionRecord[] = [];
+  private journalEntries: JournalEntry[] = [];
+  private copingStrategies: CopingStrategy[] = [];
+  private userPreferences: UserPreferences[] = [];
+  
+  private userCounter = 0;
+  private sessionCounter = 0;
+  private messageCounter = 0;
+  private emotionCounter = 0;
+  private journalCounter = 0;
+  private copingCounter = 0;
+  private prefsCounter = 0;
+
+  // User methods
+  async createUser(user: InsertUser): Promise<User> {
+    const newUser: User = {
+      id: `user_${++this.userCounter}`,
+      username: user.username,
+      email: user.email,
+      passwordHash: user.passwordHash,
+      fullName: user.fullName || null,
+      createdAt: new Date(),
+      lastLoginAt: null,
+      isActive: true,
+    };
+    this.users.push(newUser);
+    return newUser;
+  }
+
+  async getUserById(id: string): Promise<User | undefined> {
+    return this.users.find(u => u.id === id);
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return this.users.find(u => u.username === username);
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return this.users.find(u => u.email === email);
+  }
+
+  async updateUserLastLogin(id: string): Promise<void> {
+    const user = this.users.find(u => u.id === id);
+    if (user) {
+      user.lastLoginAt = new Date();
+    }
+  }
+
+  // Session methods
+  async createSession(userId?: string, title?: string): Promise<TherapySession> {
+    const session: TherapySession = {
+      id: `session_${++this.sessionCounter}`,
+      userId: userId || null,
+      startedAt: new Date(),
+      endedAt: null,
+      duration: null,
+      title: title || null,
+    };
+    this.sessions.push(session);
+    return session;
+  }
+
+  async getSession(id: string): Promise<TherapySession | undefined> {
+    return this.sessions.find(s => s.id === id);
+  }
+
+  async endSession(id: string, duration: number): Promise<TherapySession | undefined> {
+    const session = this.sessions.find(s => s.id === id);
+    if (session) {
+      session.endedAt = new Date();
+      session.duration = duration;
+    }
+    return session;
+  }
+
+  async getAllSessions(userId?: string): Promise<TherapySession[]> {
+    if (userId) {
+      return this.sessions.filter(s => s.userId === userId);
+    }
+    return [...this.sessions];
+  }
+
+  // Message methods
+  async createMessage(message: InsertMessage): Promise<Message> {
+    const msg: Message = {
+      id: `msg_${++this.messageCounter}`,
+      sessionId: message.sessionId,
+      role: message.role,
+      content: message.content,
+      emotion: message.emotion || null,
+      emotionConfidence: message.emotionConfidence || null,
+      timestamp: new Date(),
+    };
+    this.messages.push(msg);
+    return msg;
+  }
+
+  async getSessionMessages(sessionId: string): Promise<Message[]> {
+    return this.messages.filter(m => m.sessionId === sessionId);
+  }
+
+  // Emotion methods
+  async createEmotionRecord(record: InsertEmotionRecord): Promise<EmotionRecord> {
+    const emotion: EmotionRecord = {
+      id: `emotion_${++this.emotionCounter}`,
+      sessionId: record.sessionId,
+      emotion: record.emotion,
+      confidence: record.confidence,
+      timestamp: new Date(),
+    };
+    this.emotions.push(emotion);
+    return emotion;
+  }
+
+  async getSessionEmotions(sessionId: string): Promise<EmotionRecord[]> {
+    return this.emotions.filter(e => e.sessionId === sessionId);
+  }
+
+  async getAllEmotionRecords(userId?: string): Promise<EmotionRecord[]> {
+    if (userId) {
+      const userSessions = this.sessions.filter(s => s.userId === userId).map(s => s.id);
+      return this.emotions.filter(e => userSessions.includes(e.sessionId));
+    }
+    return [...this.emotions];
+  }
+
+  // Journal methods
+  async createJournalEntry(entry: InsertJournalEntry): Promise<JournalEntry> {
+    const journalEntry: JournalEntry = {
+      id: `journal_${++this.journalCounter}`,
+      userId: entry.userId,
+      title: entry.title,
+      content: entry.content,
+      mood: entry.mood || null,
+      tags: entry.tags || null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.journalEntries.push(journalEntry);
+    return journalEntry;
+  }
+
+  async getUserJournalEntries(userId: string): Promise<JournalEntry[]> {
+    return this.journalEntries.filter(j => j.userId === userId);
+  }
+
+  async updateJournalEntry(id: string, updates: Partial<InsertJournalEntry>): Promise<JournalEntry | undefined> {
+    const entry = this.journalEntries.find(j => j.id === id);
+    if (entry) {
+      Object.assign(entry, updates, { updatedAt: new Date() });
+    }
+    return entry;
+  }
+
+  async deleteJournalEntry(id: string): Promise<boolean> {
+    const index = this.journalEntries.findIndex(j => j.id === id);
+    if (index !== -1) {
+      this.journalEntries.splice(index, 1);
+      return true;
+    }
+    return false;
+  }
+
+  // Coping strategies
+  async createCopingStrategy(strategy: InsertCopingStrategy): Promise<CopingStrategy> {
+    const copingStrategy: CopingStrategy = {
+      id: `coping_${++this.copingCounter}`,
+      userId: strategy.userId || null,
+      title: strategy.title,
+      description: strategy.description,
+      category: strategy.category,
+      isPublic: strategy.isPublic || false,
+      createdAt: new Date(),
+    };
+    this.copingStrategies.push(copingStrategy);
+    return copingStrategy;
+  }
+
+  async getUserCopingStrategies(userId: string): Promise<CopingStrategy[]> {
+    return this.copingStrategies.filter(c => c.userId === userId);
+  }
+
+  async getPublicCopingStrategies(): Promise<CopingStrategy[]> {
+    return this.copingStrategies.filter(c => c.isPublic);
+  }
+
+  // User preferences
+  async createUserPreferences(prefs: InsertUserPreferences): Promise<UserPreferences> {
+    const userPrefs: UserPreferences = {
+      id: `prefs_${++this.prefsCounter}`,
+      userId: prefs.userId,
+      theme: prefs.theme || "light",
+      language: prefs.language || "en",
+      notificationsEnabled: prefs.notificationsEnabled ?? true,
+      privacyLevel: prefs.privacyLevel || "private",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.userPreferences.push(userPrefs);
+    return userPrefs;
+  }
+
+  async getUserPreferences(userId: string): Promise<UserPreferences | undefined> {
+    return this.userPreferences.find(p => p.userId === userId);
+  }
+
+  async updateUserPreferences(userId: string, updates: Partial<InsertUserPreferences>): Promise<UserPreferences | undefined> {
+    const prefs = this.userPreferences.find(p => p.userId === userId);
+    if (prefs) {
+      Object.assign(prefs, updates, { updatedAt: new Date() });
+    }
+    return prefs;
+  }
 }
 
 export class DatabaseStorage implements IStorage {
@@ -99,4 +357,4 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export const storage = new DatabaseStorage();
+export const storage = new InMemoryStorage();

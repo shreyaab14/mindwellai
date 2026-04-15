@@ -22,6 +22,7 @@ export default function Home() {
   const [currentEmotion, setCurrentEmotion] = useState<EmotionDetection | null>(null);
   const [emotionHistory, setEmotionHistory] = useState<EmotionDetection[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [streamingContent, setStreamingContent] = useState("");
   const [webcamError, setWebcamError] = useState<string>("");
   const [isModelLoading, setIsModelLoading] = useState(false);
   const [showCrisisAlert, setShowCrisisAlert] = useState(false);
@@ -100,29 +101,96 @@ export default function Home() {
       };
       
       setMessages(prev => [...prev, userMessage]);
-      
-      const response = await apiRequest("POST", "/api/messages", {
-        sessionId,
-        content,
-        emotion: emotion || null,
-        emotionConfidence: emotionConfidence ? emotionConfidence.toString() : null,
+      setStreamingContent("");
+
+      const token = localStorage.getItem("authToken");
+      const response = await fetch("/api/messages/stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          sessionId,
+          content,
+          emotion: emotion || null,
+          emotionConfidence: emotionConfidence ? emotionConfidence.toString() : null,
+        }),
       });
-      
-      return response;
+
+      if (!response.ok) {
+        throw new Error("Failed to send message");
+      }
+
+      if (!response.body) {
+        throw new Error("No response body");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = "";
+      let lastMessageId = "";
+      let buffer = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const text = decoder.decode(value, { stream: true });
+          buffer += text;
+          
+          // Process complete lines only
+          const parts = buffer.split('\n');
+          buffer = parts.pop() || ""; // Keep incomplete line in buffer
+
+          for (const line of parts) {
+            if (line.trim().startsWith('data: ')) {
+              const data = line.trim().slice(6).trim();
+              if (data && data !== ':keep-alive') {
+                try {
+                  const parsed = JSON.parse(data);
+                  
+                  if (parsed.type === 'chunk') {
+                    fullContent += parsed.content;
+                    setStreamingContent(fullContent);
+                  } else if (parsed.type === 'complete') {
+                    lastMessageId = parsed.messageId;
+                    setStreamingContent("");
+                  } else if (parsed.type === 'error') {
+                    throw new Error(parsed.error || 'Stream error');
+                  } else if (parsed.type === 'start') {
+                    console.log("Stream started");
+                  }
+                } catch (e) {
+                  console.debug("Parse error:", e);
+                }
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      return { messageId: lastMessageId, content: fullContent };
     },
     onSuccess: (data) => {
-      const assistantMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: data.response,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, assistantMessage]);
+      if (data.content) {
+        const assistantMessage: ChatMessage = {
+          id: data.messageId || crypto.randomUUID(),
+          role: "assistant",
+          content: data.content,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+      }
     },
-    onError: () => {
+    onError: (error) => {
+      setStreamingContent("");
       toast({
         title: "Error",
-        description: "Failed to send message. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to send message. Please try again.",
         variant: "destructive",
       });
     },
@@ -230,15 +298,19 @@ export default function Home() {
     };
   }, []);
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = (content: string, voiceEmotion?: any) => {
     if (detectCrisis(content)) {
       setShowCrisisAlert(true);
     }
     
+    // Use voice emotion if available, otherwise use current emotion detection
+    const emotion = voiceEmotion?.emotion || currentEmotion?.emotion;
+    const confidence = voiceEmotion ? voiceEmotion.confidence : currentEmotion?.confidence;
+    
     sendMessageMutation.mutate({
       content,
-      emotion: currentEmotion?.emotion,
-      emotionConfidence: currentEmotion?.confidence,
+      emotion,
+      emotionConfidence: confidence,
     });
   };
 
@@ -357,6 +429,16 @@ export default function Home() {
                       Coping Strategies
                     </Button>
                   </Link>
+                  <Link href="/journal" data-testid="link-journal">
+                    <Button variant="outline" size="sm">
+                      📓 Journal
+                    </Button>
+                  </Link>
+                  <Link href="/analytics" data-testid="link-analytics">
+                    <Button variant="outline" size="sm">
+                      📊 Analytics
+                    </Button>
+                  </Link>
                 </div>
               </div>
             </div>
@@ -422,6 +504,7 @@ export default function Home() {
               <div className="flex-1 min-h-0">
                 <ChatInterface
                   messages={messages}
+                  streamingContent={streamingContent}
                   isLoading={sendMessageMutation.isPending}
                 />
               </div>
