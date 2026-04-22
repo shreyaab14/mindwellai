@@ -68,12 +68,14 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.join(process.cwd(), "dist", "client");
+const distPath = path.join(process.cwd(), "dist");
 
+  console.log("Static path:", distPath, "exists:", fs.existsSync(distPath));
+  
   if (!fs.existsSync(distPath)) {
-    throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
-    );
+    console.error("Static build missing - serving error page");
+    app.use("*", (_req, res) => res.status(500).send("Build missing - contact admin"));
+    return;
   }
 
   app.use(express.static(distPath));

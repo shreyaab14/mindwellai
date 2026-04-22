@@ -48,6 +48,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 // Setup static file serving for production
 if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+  console.log("Setting up production static serve");
   serveStatic(app);
 }
 
