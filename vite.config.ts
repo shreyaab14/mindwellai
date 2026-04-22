@@ -41,6 +41,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         navigateFallback: null,
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
     }),
     ...(process.env.NODE_ENV !== "production" &&
@@ -64,7 +65,7 @@ export default defineConfig({
   },
   root: path.resolve(import.meta.dirname, "client"),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    outDir: path.resolve(import.meta.dirname, "dist/client"),
     emptyOutDir: true,
   },
   server: {

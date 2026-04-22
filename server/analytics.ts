@@ -23,7 +23,7 @@ export interface AnalyticsData {
 // Risk keywords for crisis detection
 const RISK_KEYWORDS = [
   'hurt', 'harm', 'suicide', 'kill', 'death', 'hopeless', 'worthless',
-  'give up', 'end it', 'no point', 'can\\'t take', 'unbearable',
+  'give up', 'end it', 'no point', "can't take", 'unbearable',
   'desperate', 'hopeless', 'useless', 'fail', 'failure'
 ];
 

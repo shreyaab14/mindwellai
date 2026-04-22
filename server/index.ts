@@ -56,7 +56,7 @@ if (process.env.NODE_ENV === "development" && !process.env.VERCEL) {
   (async () => {
     const listenOptions: { port: number; host: string; reusePort?: boolean } = {
       port: parseInt(process.env.PORT || "5000", 10),
-      host: "127.0.0.1",
+      host: "0.0.0.0",
     };
 
     if (process.platform !== "win32") {
