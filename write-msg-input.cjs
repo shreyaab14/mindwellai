@@ -1,4 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+const fs = require('fs');
+const path = 'c:/Users/Shreya Bhise/Downloads/MindWellAI/MindWellAI/client/src/components/MessageInput.tsx';
+
+const content = `import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Send, Mic, Volume2, Brain, Waves, StopCircle } from "lucide-react";
@@ -177,7 +180,7 @@ export function MessageInput({ onSend, disabled, showQuickReplies = true }: Mess
         <div className="px-4 py-2 flex items-center gap-2">
           <div className="flex items-end gap-[2px] h-8 flex-1">
             {audioData.map((level, i) => (
-              <div key={i} className="flex-1 bg-primary rounded-full transition-all duration-75" style={{ height: `${Math.max(4, level * 100)}%`, opacity: 0.3 + level * 0.7 }} />
+              <div key={i} className="flex-1 bg-primary rounded-full transition-all duration-75" style={{ height: \`\${Math.max(4, level * 100)}%\`, opacity: 0.3 + level * 0.7 }} />
             ))}
           </div>
           <span className="text-xs text-muted-foreground shrink-0">Listening...</span>
@@ -210,3 +213,8 @@ export function MessageInput({ onSend, disabled, showQuickReplies = true }: Mess
     </div>
   );
 }
+`;
+
+fs.writeFileSync(path, content, 'utf8');
+console.log('File written successfully');
+

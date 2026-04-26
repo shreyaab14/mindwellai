@@ -1,6 +1,5 @@
 import OpenAI from "openai";
 
-// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "mock-key" });
 
 export interface TherapyContext {
@@ -27,114 +26,233 @@ export async function generateTherapyResponse(
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o",
       messages,
-      max_completion_tokens: 2048,
+      max_tokens: 2048,
+      temperature: 0.8,
     });
 
     return response.choices[0].message.content || "I'm here to listen. Please continue.";
   } catch (error) {
     console.error("OpenAI API error:", error);
-    // Fallback to mock therapeutic response for development
     return generateMockTherapyResponse(userMessage, context);
   }
 }
 
 function generateMockTherapyResponse(userMessage: string, context: TherapyContext): string {
-  // Detect key topics from the message
-  const hasNegativeEmotions = /sad|angry|frustrated|anxious|scared|worried|hurt|confused|lost|stressed/i.test(userMessage);
-  const hasFeelingsOfHope = /better|happy|excited|grateful|hopeful|positive|good|well/i.test(userMessage);
-  const isQuestion = /\?$/.test(userMessage);
+  const lowerMsg = userMessage.toLowerCase();
   
-  const mockResponses = {
+  const emotionalPatterns: Record<string, string[]> = {
+    sad: ['sad', 'depressed', 'down', 'cry', 'crying', 'tears', 'melancholy', 'grief', 'grieving', 'heartbroken', 'lonely', 'empty', 'numb'],
+    anxious: ['anxious', 'anxiety', 'nervous', 'panic', 'worried', 'worry', 'stress', 'stressed', 'overwhelmed', 'restless', 'tense', 'scared', 'afraid', 'fear', 'stressed out', 'burned out'],
+    angry: ['angry', 'anger', 'mad', 'furious', 'rage', 'irritated', 'annoyed', 'frustrated', 'upset', 'pissed'],
+    happy: ['happy', 'joy', 'excited', 'grateful', 'thankful', 'blessed', 'cheerful', 'elated', 'content', 'peaceful', 'calm', 'good'],
+    hopeless: ['hopeless', 'worthless', 'pointless', 'meaningless', 'give up', 'no point', 'why bother', 'can\'t go on', 'suicide', 'kill myself'],
+    tired: ['tired', 'exhausted', 'fatigue', 'burnout', 'drained', 'no energy', 'sleepy', 'worn out'],
+    confused: ['confused', 'lost', 'uncertain', 'don\'t know', 'unsure', 'conflicted', 'dilemma', 'stuck'],
+  };
+
+  let detectedEmotion = '';
+  let maxMatches = 0;
+  
+  for (const [emotion, keywords] of Object.entries(emotionalPatterns)) {
+    const matches = keywords.filter(k => lowerMsg.includes(k)).length;
+    if (matches > maxMatches) {
+      maxMatches = matches;
+      detectedEmotion = emotion;
+    }
+  }
+
+  if (!detectedEmotion && context.emotion) {
+    detectedEmotion = context.emotion.toLowerCase();
+  }
+  
+  if (!detectedEmotion) {
+    detectedEmotion = 'neutral';
+  }
+
+  const responses: Record<string, Array<{ text: string; technique: string }>> = {
     sad: [
-      "I can hear that you're feeling down right now. Sadness is a valid emotion, and it's okay to feel this way. Would you like to talk about what's been weighing on your heart?",
-      "It sounds like you're going through a difficult time. Remember, emotions come and go, and this feeling won't last forever. What would help you feel a bit better right now?",
-      "I'm here to listen and support you. Sometimes just expressing how we feel can help lighten the load. Tell me more about what's on your mind.",
-    ],
-    angry: [
-      "I sense some anger in what you're sharing. Anger can be a powerful emotion that often masks deeper hurt or frustration. What's really bothering you beneath this feeling?",
-      "It's completely valid to feel angry. Let's take a moment to understand what triggered this feeling and what you need right now.",
-      "Thank you for sharing your honest feelings. What would help you feel more calm or in control right now?",
+      { text: "I'm really sorry you're feeling this way. Sadness can feel so heavy, like carrying a weight that no one else can see. Can you tell me more about when this feeling started?", technique: "validation" },
+      { text: "It takes courage to acknowledge when you're feeling down. Many people find that naming what they're going through helps — what word would you use to describe this sadness?", technique: "labeling" },
+      { text: "Sometimes sadness comes from a specific loss, and sometimes it creeps in without a clear reason. Both are valid. What's your experience right now?", technique: "exploration" },
+      { text: "I hear you. When sadness feels overwhelming, small actions can help — a warm drink, a short walk, or reaching out to someone you trust. What usually brings you even a tiny bit of comfort?", technique: "coping" },
+      { text: "Your feelings matter, and you matter. Even in this difficult moment, you reached out, and that shows strength. What would feel supportive right now?", technique: "affirmation" },
     ],
     anxious: [
-      "It sounds like anxiety is affecting you right now. Let's focus on what you can control in this moment. What's one small thing you could do to feel a bit more grounded?",
-      "Anxiety can make everything feel overwhelming. Remember, you're safe right now. Would a grounding technique or breathing exercise help?",
-      "I'm here with you. Let's work through this together. What's the main worry on your mind?",
+      { text: "Anxiety can make your mind race and your body feel on high alert. Let's slow things down together. Can you try taking a slow, deep breath with me — in for 4 counts, hold for 4, out for 4?", technique: "grounding" },
+      { text: "I can hear the worry in your words. Anxiety often tricks us into thinking about the worst-case scenario. What's one thing you know for certain right now, in this moment?", technique: "cognitive" },
+      { text: "When everything feels overwhelming, breaking things down helps. What's the very next small step you could take? Not the whole solution — just one tiny action?", technique: "actionable" },
+      { text: "Your brain is trying to protect you by being alert, but it's working overtime right now. What usually helps you feel even a little more grounded when anxiety shows up?", technique: "normalization" },
+      { text: "It's okay to feel anxious — it's a natural response. But you don't have to face it alone. Would it help to talk through what's specifically worrying you?", technique: "supportive" },
     ],
-    hopeful: [
-      "I'm glad to hear you're feeling more positive! That's wonderful. What's helping you feel this way?",
-      "It's beautiful to hear some hope in your words. How can you nurture this feeling and build on it?",
-      "Your positive energy is uplifting. What positive changes have you noticed in yourself?",
+    angry: [
+      { text: "I can hear that something has really upset you. Anger is a signal — it's telling us that a boundary was crossed or a need wasn't met. What do you think triggered this feeling?", technique: "insight" },
+      { text: "Your anger is valid. Before we work through it, let's acknowledge it without judgment. Sometimes just saying 'I'm angry and that's okay' can be powerful. How does that feel?", technique: "acceptance" },
+      { text: "When anger feels intense, it can help to pause and ask: what do I actually need right now? Is it space, understanding, or something to change? What comes up for you?", technique: "needs" },
+      { text: "Anger often masks hurt or fear underneath. If you sit with this feeling for a moment, is there something deeper it might be protecting?", technique: "depth" },
+      { text: "It's completely okay to feel angry. What would help you release some of this tension in a healthy way? Sometimes movement, writing, or talking it out helps.", technique: "release" },
+    ],
+    happy: [
+      { text: "I'm so glad to hear you're feeling good! What's contributing to this positive feeling? Understanding what lifts us up helps us create more of those moments.", technique: "reinforcement" },
+      { text: "That's wonderful! Positive emotions deserve celebration too. How can you hold onto this feeling and maybe even share it with someone else?", technique: "amplification" },
+      { text: "It's beautiful that you're experiencing this. What's one thing you're grateful for in this moment? Gratitude and happiness often go hand in hand.", technique: "gratitude" },
+    ],
+    hopeless: [
+      { text: "I'm really glad you reached out. When things feel hopeless, it can seem like nothing will ever change — but feelings are not facts. You've gotten through difficult moments before, even if you don't see it right now. Can we talk about what's making you feel this way?", technique: "gentle-reframing" },
+      { text: "What you're feeling sounds incredibly painful. Please know that you don't have to carry this alone. Would you consider talking to a mental health professional who can provide more support? In the meantime, I'm here to listen.", technique: "professional-referral" },
+      { text: "Sometimes when we're in the darkest moments, it's hard to remember that light exists. But it does, and so does hope — even if it feels far away right now. What's the smallest thing you could do to take care of yourself today?", technique: "micro-step" },
+    ],
+    tired: [
+      { text: "Exhaustion — whether physical, mental, or emotional — is your body asking for rest. What would real rest look like for you right now? Not just sleep, but true restoration?", technique: "rest" },
+      { text: "Burnout is real, and it's not a sign of weakness. It's a sign that you've been giving too much without refilling your own cup. What boundaries could you set to protect your energy?", technique: "boundaries" },
+      { text: "When we're drained, everything feels harder. Be gentle with yourself. What's one thing you could let go of today, just for now?", technique: "permission" },
+    ],
+    confused: [
+      { text: "Feeling lost or uncertain is uncomfortable, but it's also a sign that you're in a place of growth and change. What part feels most unclear right now?", technique: "clarification" },
+      { text: "Confusion often means we're processing something complex. Give yourself permission not to have all the answers right now. What would help you feel a bit more grounded?", technique: "patience" },
+      { text: "Sometimes writing things down helps create clarity. If you were to describe your situation to a friend, what would you say? What advice might they give?", technique: "perspective" },
     ],
     neutral: [
-      "Thank you for sharing that with me. I'm curious to understand more about your experience. Can you tell me a bit more?",
-      "That's an important point. How has that been affecting you emotionally?",
-      "I appreciate you opening up. What would be most helpful for you to focus on right now?",
+      { text: "Thank you for sharing that with me. I'm curious — how are you really feeling right now, beneath the surface?", technique: "deeper" },
+      { text: "I appreciate you reaching out. What brought you here today? Is there something specific on your mind, or are you just looking for a space to talk?", technique: "open" },
+      { text: "Sometimes we don't have strong feelings — and that's okay too. What's one thing that's been on your mind lately, big or small?", technique: "gentle-probe" },
+      { text: "I'm here to listen, whatever's going on. Would you like to explore a particular topic, or would you prefer I ask you some reflective questions?", technique: "choice" },
     ],
   };
 
-  let responses: string[] = [];
-  
-  if (hasNegativeEmotions) {
-    if (userMessage.toLowerCase().includes('sad') || userMessage.toLowerCase().includes('depressed')) {
-      responses = mockResponses.sad;
-    } else if (userMessage.toLowerCase().includes('angry') || userMessage.toLowerCase().includes('frustrated')) {
-      responses = mockResponses.angry;
-    } else if (userMessage.toLowerCase().includes('anxious') || userMessage.toLowerCase().includes('worried')) {
-      responses = mockResponses.anxious;
-    }
-  } else if (hasFeelingsOfHope) {
-    responses = mockResponses.hopeful;
-  } else {
-    responses = mockResponses.neutral;
+  const emotionResponses = responses[detectedEmotion] || responses.neutral;
+  const selected = emotionResponses[Math.floor(Math.random() * emotionResponses.length)];
+
+  let prefix = '';
+  if (context.emotion && context.emotion.toLowerCase() !== detectedEmotion) {
+    prefix = `I notice you mentioned feeling ${context.emotion}, and I'm also hearing ${detectedEmotion} in what you've shared. `;
+  } else if (context.emotion && detectedEmotion === 'neutral') {
+    prefix = `I sense you might be feeling ${context.emotion}. `;
   }
 
-  // Select a random response from the appropriate category
-  const selectedResponse = responses[Math.floor(Math.random() * responses.length)];
+  const followUpOptions: Record<string, Array<{ type: 'question' | 'statement'; text: string }>> = {
+    sad: [
+      { type: 'question', text: "What would feel supportive right now?" },
+      { type: 'statement', text: "I'm here with you in this. You don't have to carry it alone." },
+      { type: 'question', text: "When did you first notice this feeling?" },
+      { type: 'statement', text: "Even small moments of comfort matter right now. Be gentle with yourself." },
+      { type: 'question', text: "Who in your life helps you feel understood?" },
+      { type: 'statement', text: "Your feelings are valid, and so is your need for rest and care." },
+    ],
+    anxious: [
+      { type: 'question', text: "What would help you feel 1% more grounded?" },
+      { type: 'statement', text: "Let's take this one breath at a time. You're safe right now." },
+      { type: 'question', text: "Is there a specific worry on your mind?" },
+      { type: 'statement', text: "Anxiety is exhausting, but it doesn't define you. This feeling will pass." },
+      { type: 'question', text: "What usually calms your nervous system?" },
+      { type: 'statement', text: "Your brain is trying to protect you, even if it feels overwhelming right now." },
+    ],
+    angry: [
+      { type: 'question', text: "What boundary might have been crossed?" },
+      { type: 'statement', text: "Your anger is telling you something important. It deserves to be heard." },
+      { type: 'question', text: "What do you need most in this moment?" },
+      { type: 'statement', text: "It's okay to feel this. You don't have to suppress it for anyone." },
+      { type: 'question', text: "How can you express this feeling safely?" },
+      { type: 'statement', text: "Anger often protects a softer feeling underneath. You're allowed to explore that when you're ready." },
+    ],
+    happy: [
+      { type: 'question', text: "What's one thing you're grateful for today?" },
+      { type: 'statement', text: "I'm really glad you're feeling this way. You deserve these moments." },
+      { type: 'question', text: "How can you carry this feeling forward?" },
+      { type: 'statement', text: "Savor this feeling. Let yourself fully experience it without rushing to the next thing." },
+      { type: 'question', text: "Who would love to hear about this?" },
+      { type: 'statement', text: "Positive moments are worth celebrating. Thank you for sharing this with me." },
+    ],
+    hopeless: [
+      { type: 'question', text: "What's one small thing you could do for yourself today?" },
+      { type: 'statement', text: "I know it doesn't feel like it right now, but this heaviness is not permanent. You won't always feel this way." },
+      { type: 'question', text: "When have you felt differently in the past?" },
+      { type: 'statement', text: "You matter, even when it doesn't feel like it. Your presence here is enough." },
+      { type: 'question', text: "Who could you reach out to for support?" },
+      { type: 'statement', text: "Sometimes just getting through the day is enough. You don't have to solve everything right now." },
+    ],
+    tired: [
+      { type: 'question', text: "What would real rest look like for you?" },
+      { type: 'statement', text: "Rest is not a reward — it's a necessity. You have permission to slow down." },
+      { type: 'question', text: "What could you say no to this week?" },
+      { type: 'statement', text: "Your body is asking for care. Listen to it without guilt." },
+      { type: 'question', text: "When did you last do something just for yourself?" },
+      { type: 'statement', text: "Burnout is real, and it's not a sign of weakness. It's a sign you've been strong for too long." },
+    ],
+    confused: [
+      { type: 'question', text: "What would clarity look like for you?" },
+      { type: 'statement', text: "Not knowing is uncomfortable, but it's also where growth happens. Be patient with yourself." },
+      { type: 'question', text: "If you trusted your gut, what would it say?" },
+      { type: 'statement', text: "You don't need all the answers right now. It's okay to sit with the uncertainty." },
+      { type: 'question', text: "What's one small step you could take?" },
+      { type: 'statement', text: "Confusion often means you're processing something important. Give yourself time." },
+    ],
+    neutral: [
+      { type: 'question', text: "What's on your mind right now?" },
+      { type: 'statement', text: "I'm here to listen, whatever's going on. No pressure to feel anything specific." },
+      { type: 'question', text: "How has your day been so far?" },
+      { type: 'statement', text: "Sometimes neutral is exactly where we need to be. It's a valid place to rest." },
+      { type: 'question', text: "Is there anything you'd like to explore?" },
+      { type: 'statement', text: "You don't have to have strong feelings to deserve support. I'm here either way." },
+    ],
+  };
+
+  const options = followUpOptions[detectedEmotion] || followUpOptions.neutral;
+  const selectedOption = options[Math.floor(Math.random() * options.length)];
+
+  // Only add follow-up 70% of the time, and alternate between questions and statements
+  const shouldAddFollowUp = Math.random() > 0.3;
   
-  // Add emotional context if available
-  if (context.emotion) {
-    return `I notice you might be feeling ${context.emotion}. ${selectedResponse}`;
+  if (shouldAddFollowUp) {
+    return `${prefix}${selected.text}
+
+${selectedOption.text}`;
+  } else {
+    return `${prefix}${selected.text}`;
   }
-  
-  return selectedResponse;
 }
 
 function buildSystemPrompt(emotion?: string, confidence?: number): string {
-  let basePrompt = `You are a compassionate, empathetic AI therapy assistant designed to provide supportive mental health guidance. Your role is to:
+  let basePrompt = `You are MindWell, a warm, empathetic AI therapy companion. Your name is MindWell. You provide supportive mental health guidance with the following approach:
 
-1. Listen actively and validate the user's feelings
-2. Provide emotional support and coping strategies
-3. Ask thoughtful questions to help users explore their emotions
-4. Offer practical mindfulness and stress-management techniques
-5. Maintain a warm, non-judgmental, and encouraging tone
-6. NEVER diagnose mental health conditions or replace professional therapy
-7. Encourage seeking professional help for serious concerns
+## Core Principles
+1. **Validate first, always** — Acknowledge the user's feelings before offering any suggestions
+2. **Use evidence-based techniques** — CBT reframing, mindfulness, grounding exercises, self-compassion
+3. **Be conversational and warm** — Use "we" and "together" language, avoid clinical jargon
+4. **Keep it human-sized** — 2-4 sentences of support, then ONE thoughtful question OR a reflective statement (not both)
+5. **Never diagnose** — You're a supportive companion, not a doctor
+6. **Know your limits** — For crisis language, gently suggest professional help
+7. **Vary your responses** — Don't always ask questions. Sometimes offer validation, a coping technique, or simply sit with them in silence
 
-Guidelines:
-- Keep responses concise and focused (2-4 sentences typically)
-- Use empathetic language that shows understanding
-- Avoid clinical jargon - be conversational and approachable
-- Validate emotions before offering suggestions
-- End with open-ended questions when appropriate to encourage dialogue`;
+## Response Structure
+- Start with empathetic validation ("I hear that you're feeling...")
+- Offer one specific insight, technique, or supportive statement
+- End with EITHER an open question OR a reflective closing statement — alternate between them
+
+## What to Avoid
+- Don't ask more than one question per response
+- Don't use the same follow-up pattern every time ("What would help?", "What's on your mind?")
+- Don't force psychoeducation — keep it conversational
+- Avoid: "You should," "Just think positive," "At least..."
+- Instead: "What if we tried...," "It sounds like...," "Many people find...", "I'm here with you"`;
 
   if (emotion && confidence !== undefined) {
     const confidencePercent = Math.round(confidence * 100);
-    basePrompt += `\n\nCurrent emotional context: The user appears to be feeling ${emotion} (${confidencePercent}% confidence). Adapt your response to acknowledge and support this emotional state appropriately.`;
+    basePrompt += `\n\n## Current Session Context\nThe user appears to be feeling **${emotion}** (${confidencePercent}% confidence detected).`;
     
     const emotionGuidance: Record<string, string> = {
-      sad: "Show extra compassion and gentleness. Validate their sadness and explore what might help them feel supported.",
-      angry: "Acknowledge their frustration calmly. Help them process anger constructively without dismissing their feelings.",
-      fearful: "Provide reassurance and safety. Help them identify what feels threatening and develop coping strategies.",
-      happy: "Share in their positive emotions. Explore what's going well and how they can build on positive experiences.",
-      disgusted: "Validate their discomfort. Help them process what's bothering them without judgment.",
-      surprised: "Acknowledge the unexpected nature of their experience. Help them process and make sense of it.",
-      neutral: "Engage warmly and explore what's on their mind. Create a comfortable space for them to open up.",
+      sad: "Be extra gentle. Validate the heaviness. Offer small, manageable steps. Avoid toxic positivity.",
+      angry: "Stay calm and accepting. Help them identify the unmet need behind the anger. No judgment.",
+      fearful: "Provide reassurance without dismissal. Help them name specific fears. Grounding techniques help.",
+      happy: "Celebrate with them! Explore what's working. Help them savor and remember this feeling.",
+      disgusted: "Accept their reaction without minimizing. Help them process what triggered this response.",
+      surprised: "Help them integrate the unexpected. Normalize that surprises can be disorienting.",
+      neutral: "Be curious and warm. Explore gently. They may be masking deeper feelings.",
     };
 
     if (emotionGuidance[emotion]) {
-      basePrompt += `\n\nSpecific guidance for ${emotion}: ${emotionGuidance[emotion]}`;
+      basePrompt += `\n\nGuidance for ${emotion}: ${emotionGuidance[emotion]}`;
     }
   }
 
@@ -174,7 +292,7 @@ Format your response as JSON with these keys: overview, keyInsights (array), emo
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
@@ -182,7 +300,7 @@ Format your response as JSON with these keys: overview, keyInsights (array), emo
         },
         { role: "user", content: prompt },
       ],
-      max_completion_tokens: 1024,
+      max_tokens: 1024,
       response_format: { type: "json_object" },
     });
 

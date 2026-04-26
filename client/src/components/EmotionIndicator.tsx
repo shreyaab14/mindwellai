@@ -19,7 +19,7 @@ const emotionConfig: Record<EmotionType, { label: string; icon: any; color: stri
 };
 
 export function EmotionIndicator({ emotion, confidence, size = "sm" }: EmotionIndicatorProps) {
-  const config = emotionConfig[emotion];
+  const config = emotionConfig[emotion] || emotionConfig.neutral;
   const Icon = config.icon;
 
   if (size === "lg") {

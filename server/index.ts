@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
@@ -48,7 +49,6 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 // Setup static file serving for production
 if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
-  console.log("Setting up production static serve");
   serveStatic(app);
 }
 
