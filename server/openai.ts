@@ -1,6 +1,11 @@
+import 'dotenv/config';
 import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "mock-key" });
+const apiKey = process.env.OPENAI_API_KEY;
+if (!apiKey) {
+  console.warn("[openai.ts] OPENAI_API_KEY not found in environment — AI responses will use fallback mock mode");
+}
+const openai = new OpenAI({ apiKey: apiKey || "missing-key" });
 
 export interface TherapyContext {
   emotion?: string;
