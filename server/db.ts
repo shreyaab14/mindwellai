@@ -1,9 +1,7 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle, NeonDatabase } from 'drizzle-orm/neon-serverless';
-import ws from "ws";
 import * as schema from "../shared/schema";
 
-neonConfig.webSocketConstructor = ws;
 // Use HTTP fetch for queries in serverless environments (better compatibility)
 neonConfig.poolQueryViaFetch = true;
 
@@ -13,6 +11,15 @@ let db: NeonDatabase<typeof schema> | null = null;
 
 if (process.env.DATABASE_URL) {
   try {
+    // Dynamically import ws only if WebSocket is actually needed (fallback from fetch)
+    if (!neonConfig.poolQueryViaFetch) {
+      import("ws").then(({ default: WebSocket }) => {
+        neonConfig.webSocketConstructor = WebSocket;
+      }).catch(() => {
+        console.log("[db] ws module not available, using fetch only");
+      });
+    }
+    
     pool = new Pool({ connectionString: process.env.DATABASE_URL });
     db = drizzle({ client: pool, schema });
     console.log("[db] Database connection initialized");
