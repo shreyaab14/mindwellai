@@ -8,14 +8,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Calendar, Heart } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-
-interface JournalEntry {
+import { useToast } from "@/hooks/use-toast";interface JournalEntry {
   id: string;
   title: string;
   content: string;
   mood?: string;
-  tags: string[];
+  tags: string;
   createdAt: string;
   updatedAt: string;
 }

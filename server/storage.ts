@@ -21,7 +21,7 @@ import {
   copingStrategies,
   userPreferences
 } from "../shared/schema";
-import { db } from "./db";
+import { db, hasDatabase } from "./db";
 import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
@@ -522,6 +522,6 @@ export class DatabaseStorage implements IStorage {
 }
 
 // Export the appropriate storage based on environment
-export const storage: IStorage = db 
+export const storage: IStorage = hasDatabase 
   ? new DatabaseStorage() 
   : new InMemoryStorage();

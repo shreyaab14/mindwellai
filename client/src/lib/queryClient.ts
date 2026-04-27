@@ -7,7 +7,7 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-function getAuthHeaders(): Record<string, string> {
+function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem("authToken");
   const headers: Record<string, string> = {};
   if (token) {

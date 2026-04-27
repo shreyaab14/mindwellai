@@ -1,4 +1,9 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
+const fs = require('fs');
+const path = require('path');
+
+const filePath = path.join(__dirname, 'server', 'db.ts');
+
+const correctContent = `import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle, NeonDatabase } from 'drizzle-orm/neon-serverless';
 import * as schema from "../shared/schema";
 
@@ -34,3 +39,7 @@ if (process.env.DATABASE_URL) {
 }
 
 export { pool, db, hasDatabase };
+`;
+
+fs.writeFileSync(filePath, correctContent, 'utf8');
+console.log('Fixed server/db.ts');

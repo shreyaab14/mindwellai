@@ -1,6 +1,4 @@
-# Vercel Deployment TODO
 
-- [x] Understand project structure and Vercel requirements
 - [x] Identify issues (vite devDependency import, nanoid transitive dep, static path resolution, invalid vercel.json env)
 - [x] Update `server/vite.ts`: dynamic import for `vite`, replace `nanoid`, fix `serveStatic` paths
 - [x] Update `vercel.json`: remove invalid `env` field
