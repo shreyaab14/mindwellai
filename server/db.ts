@@ -1,13 +1,13 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
+import { drizzle, NeonDatabase } from 'drizzle-orm/neon-serverless';
 import ws from "ws";
-import * as schema from "@shared/schema";
+import * as schema from "../shared/schema";
 
 neonConfig.webSocketConstructor = ws;
 
 // Only require DATABASE_URL if we're actually using the database
 let pool: Pool | null = null;
-let db: any = null;
+let db: NeonDatabase<typeof schema> | null = null;
 
 if (process.env.DATABASE_URL) {
   pool = new Pool({ connectionString: process.env.DATABASE_URL });

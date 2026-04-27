@@ -20,7 +20,7 @@ import {
   journalEntries,
   copingStrategies,
   userPreferences
-} from "@shared/schema";
+} from "../shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
 
@@ -285,10 +285,51 @@ class InMemoryStorage implements IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  async createSession(): Promise<TherapySession> {
+  // User methods
+  async createUser(user: InsertUser): Promise<User> {
+    const [newUser] = await db
+      .insert(users)
+      .values(user)
+      .returning();
+    return newUser;
+  }
+
+  async getUserById(id: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, username));
+    return user || undefined;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email));
+    return user || undefined;
+  }
+
+  async updateUserLastLogin(id: string): Promise<void> {
+    await db
+      .update(users)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(users.id, id));
+  }
+
+  // Session methods
+  async createSession(userId?: string, title?: string): Promise<TherapySession> {
     const [session] = await db
       .insert(therapySessions)
-      .values({})
+      .values({ userId: userId || null, title: title || null })
       .returning();
     return session;
   }
@@ -310,13 +351,21 @@ export class DatabaseStorage implements IStorage {
     return session || undefined;
   }
 
-  async getAllSessions(): Promise<TherapySession[]> {
+  async getAllSessions(userId?: string): Promise<TherapySession[]> {
+    if (userId) {
+      return await db
+        .select()
+        .from(therapySessions)
+        .where(eq(therapySessions.userId, userId))
+        .orderBy(desc(therapySessions.startedAt));
+    }
     return await db
       .select()
       .from(therapySessions)
       .orderBy(desc(therapySessions.startedAt));
   }
 
+  // Message methods
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
     const [message] = await db
       .insert(messages)
@@ -333,6 +382,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(messages.timestamp);
   }
 
+  // Emotion methods
   async createEmotionRecord(insertRecord: InsertEmotionRecord): Promise<EmotionRecord> {
     const [record] = await db
       .insert(emotionRecords)
@@ -349,12 +399,120 @@ export class DatabaseStorage implements IStorage {
       .orderBy(emotionRecords.timestamp);
   }
 
-  async getAllEmotionRecords(): Promise<EmotionRecord[]> {
+  async getAllEmotionRecords(userId?: string): Promise<EmotionRecord[]> {
+    if (userId) {
+      // Get all sessions for user, then emotions for those sessions
+      const userSessions = await db
+        .select()
+        .from(therapySessions)
+        .where(eq(therapySessions.userId, userId));
+      const sessionIds = userSessions.map((s: { id: string }) => s.id);
+      if (sessionIds.length === 0) return [];
+      // Use inArray for multiple session IDs; single session uses eq
+      if (sessionIds.length === 1) {
+        return await db
+          .select()
+          .from(emotionRecords)
+          .where(eq(emotionRecords.sessionId, sessionIds[0]));
+      }
+      const { inArray } = await import("drizzle-orm");
+      return await db
+        .select()
+        .from(emotionRecords)
+        .where(inArray(emotionRecords.sessionId, sessionIds));
+    }
     return await db
       .select()
       .from(emotionRecords)
       .orderBy(desc(emotionRecords.timestamp));
   }
+
+  // Journal methods
+  async createJournalEntry(entry: InsertJournalEntry): Promise<JournalEntry> {
+    const [journalEntry] = await db
+      .insert(journalEntries)
+      .values(entry)
+      .returning();
+    return journalEntry;
+  }
+
+  async getUserJournalEntries(userId: string): Promise<JournalEntry[]> {
+    return await db
+      .select()
+      .from(journalEntries)
+      .where(eq(journalEntries.userId, userId))
+      .orderBy(desc(journalEntries.createdAt));
+  }
+
+  async updateJournalEntry(id: string, updates: Partial<InsertJournalEntry>): Promise<JournalEntry | undefined> {
+    const [entry] = await db
+      .update(journalEntries)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(journalEntries.id, id))
+      .returning();
+    return entry || undefined;
+  }
+
+  async deleteJournalEntry(id: string): Promise<boolean> {
+    const result = await db
+      .delete(journalEntries)
+      .where(eq(journalEntries.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // Coping strategies
+  async createCopingStrategy(strategy: InsertCopingStrategy): Promise<CopingStrategy> {
+    const [copingStrategy] = await db
+      .insert(copingStrategies)
+      .values(strategy)
+      .returning();
+    return copingStrategy;
+  }
+
+  async getUserCopingStrategies(userId: string): Promise<CopingStrategy[]> {
+    return await db
+      .select()
+      .from(copingStrategies)
+      .where(eq(copingStrategies.userId, userId))
+      .orderBy(desc(copingStrategies.createdAt));
+  }
+
+  async getPublicCopingStrategies(): Promise<CopingStrategy[]> {
+    return await db
+      .select()
+      .from(copingStrategies)
+      .where(eq(copingStrategies.isPublic, true))
+      .orderBy(desc(copingStrategies.createdAt));
+  }
+
+  // User preferences
+  async createUserPreferences(prefs: InsertUserPreferences): Promise<UserPreferences> {
+    const [userPrefs] = await db
+      .insert(userPreferences)
+      .values(prefs)
+      .returning();
+    return userPrefs;
+  }
+
+  async getUserPreferences(userId: string): Promise<UserPreferences | undefined> {
+    const [prefs] = await db
+      .select()
+      .from(userPreferences)
+      .where(eq(userPreferences.userId, userId));
+    return prefs || undefined;
+  }
+
+  async updateUserPreferences(userId: string, updates: Partial<InsertUserPreferences>): Promise<UserPreferences | undefined> {
+    const [prefs] = await db
+      .update(userPreferences)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(userPreferences.userId, userId))
+      .returning();
+    return prefs || undefined;
+  }
 }
 
-export const storage = new InMemoryStorage();
+// Export the appropriate storage based on environment
+export const storage: IStorage = db 
+  ? new DatabaseStorage() 
+  : new InMemoryStorage();

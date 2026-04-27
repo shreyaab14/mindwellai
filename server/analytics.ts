@@ -1,6 +1,6 @@
 import Sentiment from 'sentiment';
 import { mean, median, standardDeviation } from 'simple-statistics';
-import type { EmotionRecord, Message } from '@shared/schema';
+import type { EmotionRecord, Message } from '../shared/schema';
 
 const sentiment = new Sentiment();
 

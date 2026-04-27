@@ -9,7 +9,7 @@ import {
   type AnalyticsData 
 } from "./analytics";
 import { generateMoodReportPDF } from "./pdf-generator";
-import { insertMessageSchema } from "@shared/schema";
+import { insertMessageSchema } from "../shared/schema";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import passport from "passport";
