@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Calendar, Heart } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-
+interface JournalEntry {
   id: string;
   title: string;
   content: string;
