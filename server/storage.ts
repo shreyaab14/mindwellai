@@ -285,9 +285,18 @@ class InMemoryStorage implements IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private database: NonNullable<typeof db>;
+
+  constructor() {
+    if (!db) {
+      throw new Error("Database not initialized. DatabaseStorage requires a database connection.");
+    }
+    this.database = db;
+  }
+
   // User methods
   async createUser(user: InsertUser): Promise<User> {
-    const [newUser] = await db
+    const [newUser] = await this.database
       .insert(users)
       .values(user)
       .returning();
@@ -295,7 +304,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserById(id: string): Promise<User | undefined> {
-    const [user] = await db
+    const [user] = await this.database
       .select()
       .from(users)
       .where(eq(users.id, id));
@@ -303,7 +312,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db
+    const [user] = await this.database
       .select()
       .from(users)
       .where(eq(users.username, username));
@@ -311,7 +320,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db
+    const [user] = await this.database
       .select()
       .from(users)
       .where(eq(users.email, email));
@@ -319,7 +328,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserLastLogin(id: string): Promise<void> {
-    await db
+    await this.database
       .update(users)
       .set({ lastLoginAt: new Date() })
       .where(eq(users.id, id));
@@ -327,7 +336,7 @@ export class DatabaseStorage implements IStorage {
 
   // Session methods
   async createSession(userId?: string, title?: string): Promise<TherapySession> {
-    const [session] = await db
+    const [session] = await this.database
       .insert(therapySessions)
       .values({ userId: userId || null, title: title || null })
       .returning();
@@ -335,7 +344,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSession(id: string): Promise<TherapySession | undefined> {
-    const [session] = await db
+    const [session] = await this.database
       .select()
       .from(therapySessions)
       .where(eq(therapySessions.id, id));
@@ -343,7 +352,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async endSession(id: string, duration: number): Promise<TherapySession | undefined> {
-    const [session] = await db
+    const [session] = await this.database
       .update(therapySessions)
       .set({ endedAt: new Date(), duration })
       .where(eq(therapySessions.id, id))
@@ -353,13 +362,13 @@ export class DatabaseStorage implements IStorage {
 
   async getAllSessions(userId?: string): Promise<TherapySession[]> {
     if (userId) {
-      return await db
+      return await this.database
         .select()
         .from(therapySessions)
         .where(eq(therapySessions.userId, userId))
         .orderBy(desc(therapySessions.startedAt));
     }
-    return await db
+    return await this.database
       .select()
       .from(therapySessions)
       .orderBy(desc(therapySessions.startedAt));
@@ -367,7 +376,7 @@ export class DatabaseStorage implements IStorage {
 
   // Message methods
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
-    const [message] = await db
+    const [message] = await this.database
       .insert(messages)
       .values(insertMessage)
       .returning();
@@ -375,7 +384,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSessionMessages(sessionId: string): Promise<Message[]> {
-    return await db
+    return await this.database
       .select()
       .from(messages)
       .where(eq(messages.sessionId, sessionId))
@@ -384,7 +393,7 @@ export class DatabaseStorage implements IStorage {
 
   // Emotion methods
   async createEmotionRecord(insertRecord: InsertEmotionRecord): Promise<EmotionRecord> {
-    const [record] = await db
+    const [record] = await this.database
       .insert(emotionRecords)
       .values(insertRecord)
       .returning();
@@ -392,7 +401,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSessionEmotions(sessionId: string): Promise<EmotionRecord[]> {
-    return await db
+    return await this.database
       .select()
       .from(emotionRecords)
       .where(eq(emotionRecords.sessionId, sessionId))
@@ -402,7 +411,7 @@ export class DatabaseStorage implements IStorage {
   async getAllEmotionRecords(userId?: string): Promise<EmotionRecord[]> {
     if (userId) {
       // Get all sessions for user, then emotions for those sessions
-      const userSessions = await db
+      const userSessions = await this.database
         .select()
         .from(therapySessions)
         .where(eq(therapySessions.userId, userId));
@@ -410,18 +419,18 @@ export class DatabaseStorage implements IStorage {
       if (sessionIds.length === 0) return [];
       // Use inArray for multiple session IDs; single session uses eq
       if (sessionIds.length === 1) {
-        return await db
+        return await this.database
           .select()
           .from(emotionRecords)
           .where(eq(emotionRecords.sessionId, sessionIds[0]));
       }
       const { inArray } = await import("drizzle-orm");
-      return await db
+      return await this.database
         .select()
         .from(emotionRecords)
         .where(inArray(emotionRecords.sessionId, sessionIds));
     }
-    return await db
+    return await this.database
       .select()
       .from(emotionRecords)
       .orderBy(desc(emotionRecords.timestamp));
@@ -429,7 +438,7 @@ export class DatabaseStorage implements IStorage {
 
   // Journal methods
   async createJournalEntry(entry: InsertJournalEntry): Promise<JournalEntry> {
-    const [journalEntry] = await db
+    const [journalEntry] = await this.database
       .insert(journalEntries)
       .values(entry)
       .returning();
@@ -437,7 +446,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserJournalEntries(userId: string): Promise<JournalEntry[]> {
-    return await db
+    return await this.database
       .select()
       .from(journalEntries)
       .where(eq(journalEntries.userId, userId))
@@ -445,7 +454,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateJournalEntry(id: string, updates: Partial<InsertJournalEntry>): Promise<JournalEntry | undefined> {
-    const [entry] = await db
+    const [entry] = await this.database
       .update(journalEntries)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(journalEntries.id, id))
@@ -454,7 +463,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteJournalEntry(id: string): Promise<boolean> {
-    const result = await db
+    const result = await this.database
       .delete(journalEntries)
       .where(eq(journalEntries.id, id));
     return (result.rowCount ?? 0) > 0;
@@ -462,7 +471,7 @@ export class DatabaseStorage implements IStorage {
 
   // Coping strategies
   async createCopingStrategy(strategy: InsertCopingStrategy): Promise<CopingStrategy> {
-    const [copingStrategy] = await db
+    const [copingStrategy] = await this.database
       .insert(copingStrategies)
       .values(strategy)
       .returning();
@@ -470,7 +479,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserCopingStrategies(userId: string): Promise<CopingStrategy[]> {
-    return await db
+    return await this.database
       .select()
       .from(copingStrategies)
       .where(eq(copingStrategies.userId, userId))
@@ -478,7 +487,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPublicCopingStrategies(): Promise<CopingStrategy[]> {
-    return await db
+    return await this.database
       .select()
       .from(copingStrategies)
       .where(eq(copingStrategies.isPublic, true))
@@ -487,7 +496,7 @@ export class DatabaseStorage implements IStorage {
 
   // User preferences
   async createUserPreferences(prefs: InsertUserPreferences): Promise<UserPreferences> {
-    const [userPrefs] = await db
+    const [userPrefs] = await this.database
       .insert(userPreferences)
       .values(prefs)
       .returning();
@@ -495,7 +504,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserPreferences(userId: string): Promise<UserPreferences | undefined> {
-    const [prefs] = await db
+    const [prefs] = await this.database
       .select()
       .from(userPreferences)
       .where(eq(userPreferences.userId, userId));
@@ -503,7 +512,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserPreferences(userId: string, updates: Partial<InsertUserPreferences>): Promise<UserPreferences | undefined> {
-    const [prefs] = await db
+    const [prefs] = await this.database
       .update(userPreferences)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(userPreferences.userId, userId))
