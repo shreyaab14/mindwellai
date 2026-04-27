@@ -132,9 +132,6 @@ export type CopingStrategy = typeof copingStrategies.$inferSelect;
 export type InsertUserPreferences = z.infer<typeof insertUserPreferencesSchema>;
 export type UserPreferences = typeof userPreferences.$inferSelect;
 
-export type InsertEmotionRecord = z.infer<typeof insertEmotionRecordSchema>;
-export type EmotionRecord = typeof emotionRecords.$inferSelect;
-
 export type EmotionType = 'happy' | 'sad' | 'angry' | 'fearful' | 'disgusted' | 'surprised' | 'neutral';
 
 export interface EmotionDetection {
