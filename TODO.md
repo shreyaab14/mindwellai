@@ -10,5 +10,5 @@
 - [x] Fix `server/routes.ts`: remove unnecessary Passport session code
 - [x] Fix `server/db.ts`: proper typing
 - [x] Update `vercel.json`: ensure client builds before serverless
-- [ ] Vercel deployment: requires user login & env vars setup
+- [x] Vercel deployment: successful - https://mindwellai-5mtwyzk4m-shreyabhise14-9874s-projects.vercel.app
 

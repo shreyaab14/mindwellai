@@ -79,15 +79,26 @@ export function serveStatic(app: Express) {
     path.resolve(process.cwd(), "dist", "public"),
     path.resolve(process.cwd(), "..", "dist", "public"),
     path.resolve("/var/task", "dist", "public"),
+    path.resolve("/var/task/server", "..", "dist", "public"),
   ];
 
   const distPath = possiblePaths.find((p) => fs.existsSync(p));
 
   if (!distPath) {
-    throw new Error(
-      `Could not find the build directory. Tried:\n${possiblePaths.join("\n")}\nMake sure to build the client first.`,
+    console.error(
+      `[serveStatic] Could not find the build directory. Tried:\n${possiblePaths.join("\n")}`,
     );
+    // Don't throw - just return 404 for static routes so API still works
+    app.use("*", (_req, res) => {
+      res.status(404).json({ 
+        error: "Static files not found. Build may be incomplete.",
+        pathsChecked: possiblePaths 
+      });
+    });
+    return;
   }
+
+  console.log(`[serveStatic] Serving static files from: ${distPath}`);
 
   app.use(express.static(distPath));
 
